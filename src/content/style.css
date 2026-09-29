@@ -1,0 +1,192 @@
+/* BeeLingo content script styles — loaded into Shadow DOM, fully scoped */
+
+:host {
+  all: initial;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #1a1a1a;
+}
+
+.beelingo-host {
+  position: fixed;
+  z-index: 2147483646;
+  pointer-events: auto;
+}
+
+/* ---------- 小蜜蜂图标 ---------- */
+
+.beelingo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
+  background: #f5b700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  user-select: none;
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+.beelingo-icon:hover {
+  transform: scale(1.1);
+}
+.beelingo-icon:active {
+  transform: scale(0.95);
+}
+
+/* ---------- 译文气泡 ---------- */
+
+.beelingo-bubble {
+  position: fixed;
+  max-width: min(360px, calc(100vw - 24px));
+  background: #ffffff;
+  color: #1a1a1a;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  padding: 12px 14px;
+  z-index: 2147483647;
+  pointer-events: auto;
+  animation: beelingo-in 140ms ease-out;
+}
+
+@keyframes beelingo-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.beelingo-bubble.loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6c6c6c;
+}
+.beelingo-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #e0e0e0;
+  border-top-color: #f5b700;
+  border-radius: 50%;
+  animation: beelingo-spin 700ms linear infinite;
+}
+@keyframes beelingo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.beelingo-bubble-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: #999;
+}
+.beelingo-bubble-header .source {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.beelingo-bubble-header .close {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: #999;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.beelingo-bubble-header .close:hover {
+  color: #333;
+}
+
+.beelingo-bubble-original {
+  font-size: 12px;
+  color: #6c6c6c;
+  border-left: 2px solid #e5e5e5;
+  padding-left: 8px;
+  margin-bottom: 8px;
+  max-height: 60px;
+  overflow: auto;
+  word-wrap: break-word;
+}
+
+.beelingo-bubble-translation {
+  font-size: 14px;
+  color: #1a1a1a;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.beelingo-bubble-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+.beelingo-bubble-actions button {
+  flex: 1;
+  border: 1px solid #e5e5e5;
+  background: #fafafa;
+  color: #555;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.beelingo-bubble-actions button:hover {
+  background: #f0f0f0;
+}
+
+.beelingo-bubble-error {
+  color: #c0392b;
+  font-size: 13px;
+}
+.beelingo-bubble-error code {
+  background: #f8e8e8;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :host {
+    color: #e8e8e8;
+  }
+  .beelingo-bubble {
+    background: #2a2a2a;
+    color: #e8e8e8;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+  .beelingo-bubble-original {
+    color: #999;
+    border-left-color: #444;
+  }
+  .beelingo-bubble-actions {
+    border-top-color: #3a3a3a;
+  }
+  .beelingo-bubble-actions button {
+    background: #333;
+    border-color: #444;
+    color: #ccc;
+  }
+  .beelingo-bubble-actions button:hover {
+    background: #3d3d3d;
+  }
+  .beelingo-bubble-header {
+    color: #888;
+  }
+}
