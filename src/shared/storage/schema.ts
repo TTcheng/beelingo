@@ -23,6 +23,11 @@ export const SettingsSchema = z.object({
   apiBaseUrl: z.string().url().default('https://api.MiniMax.chat/v1'),
   /** 模型名，默认 M3（OpenAI 兼容） */
   model: z.string().default('MiniMax-M3'),
+  /**
+   * 是否启用模型思维链。默认 'disabled' —— 翻译是确定性任务，
+   * 启用思考只会拖慢响应、消耗 token、且 reasoning_content 会污染译文。
+   */
+  thinking: z.enum(['disabled', 'adaptive']).default('disabled'),
   sourceLang: z.enum(SOURCE_LANGS).default(LangCode.Auto),
   targetLang: z.enum(TARGET_LANGS).default(LangCode.ZH),
   trigger: z.enum(['icon', 'hotkey', 'both'] as const).default(TriggerMode.Both),

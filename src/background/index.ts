@@ -119,6 +119,7 @@ async function handleTranslate(msg: TranslateRequestMessage): Promise<TranslateR
     baseUrl: settings.apiBaseUrl,
     model: settings.model,
     apiKey: settings.apiKey,
+    thinking: settings.thinking,
   });
 
   if (!outcome.ok) {
@@ -185,10 +186,14 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== 'beelingo-translate-selection') return;
   const text = info.selectionText;
   if (!text || !tab?.id) return;
-  void chrome.tabs.sendMessage(tab.id, {
-    type: 'BEELINGO_CONTEXT_MENU_TRIGGERED',
-    payload: { text },
-  });
+  void chrome.tabs
+    .sendMessage(tab.id, {
+      type: 'BEELINGO_CONTEXT_MENU_TRIGGERED',
+      payload: { text },
+    })
+    .catch(() => {
+      /* content script 未注入（如 about:/moz-extension:/未授权 host） */
+    });
 });
 
 // ---------- 命令快捷键 ----------

@@ -5,6 +5,9 @@
 
 import { LANG_DISPLAY_NAME, type LangCodeValue } from './languages.js';
 
+/** 思维链控制：关闭 = 直接出译文；adaptive = 让模型自己决定。 */
+export type ThinkingMode = 'disabled' | 'adaptive';
+
 export interface TranslateOptions {
   text: string;
   sourceLang: LangCodeValue;
@@ -15,6 +18,11 @@ export interface TranslateOptions {
   model: string;
   /** API Key */
   apiKey: string;
+  /**
+   * 是否启用思维链。默认 'disabled' —— 翻译场景下 reasoning_content
+   * 会污染气泡，且 token 成本翻倍。
+   */
+  thinking?: ThinkingMode;
   signal?: AbortSignal;
 }
 
@@ -83,10 +91,16 @@ export async function translate(opts: TranslateOptions): Promise<TranslateOutcom
   }
 
   const url = `${opts.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const thinking: ThinkingMode = opts.thinking ?? 'disabled';
   const body = {
     model: opts.model,
     temperature: 0.2,
     max_tokens: Math.max(64, Math.ceil(text.length * 2)),
+    // 关闭思维链时同时强制把 reasoning 留在 reasoning_content，
+    // 避免 M3 把 <think>...</think> 写进 content 污染译文。
+    ...(thinking === 'disabled'
+      ? { thinking: { type: 'disabled' }, reasoning_split: false }
+      : { thinking: { type: 'adaptive' } }),
     messages: [
       { role: 'system', content: buildSystemPrompt(opts.sourceLang, opts.targetLang) },
       { role: 'user', content: text },
