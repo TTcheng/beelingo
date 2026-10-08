@@ -81,6 +81,7 @@ npm run build          # 或 build:chrome / build:firefox / build:all → 产物
 
 ```
 beelingo/
+├── LICENSE
 ├── package.json · tsconfig.json · vitest.config.ts
 ├── vite.config.chrome.ts · vite.config.firefox.ts
 ├── scripts/
@@ -141,4 +142,4 @@ npm test             # vitest 单元测试
 
 ## License
 
-MIT（见 `package.json`）。
+[MIT](./LICENSE) © 2026 TTcheng
