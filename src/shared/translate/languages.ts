@@ -1,6 +1,6 @@
 /**
- * 支持的语种方向 + 显示名（i18n key 用 chrome.i18n.getMessage 解析）
- * 数值对照 ISO 639-1；显示名由前端 i18n 资源提供。
+ * 支持的语种 + 显示名。代码为 ISO 639-1；LANG_DISPLAY_NAME 直接进 prompt，
+ * 用语言全称避免模型把 zh 误解成繁体。
  */
 
 export const LangCode = {

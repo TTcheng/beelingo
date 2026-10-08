@@ -127,6 +127,13 @@
         <label for="model">模型</label>
         <input type="text" id="model" placeholder="MiniMax-M3" />
       </div>
+      <div class="row">
+        <label for="thinking">思维链</label>
+        <select id="thinking">
+          <option value="disabled">关闭（推荐，直接出译文）</option>
+          <option value="adaptive">自适应（模型自行决定）</option>
+        </select>
+      </div>
       <div class="actions">
         <button id="validate" type="button">验证 Key</button>
         <span id="validateStatus" class="status"></span>
@@ -161,24 +168,7 @@
     </section>
 
     <section>
-      <h2>触发方式</h2>
-      <div class="row">
-        <label for="trigger">触发方式</label>
-        <select id="trigger">
-          <option value="both">图标 + 快捷键 (Ctrl+Shift+Y)</option>
-          <option value="icon">仅图标</option>
-          <option value="hotkey">仅快捷键</option>
-        </select>
-      </div>
-      <div class="row">
-        <label for="bubbleTtlMs">气泡停留</label>
-        <select id="bubbleTtlMs">
-          <option value="3000">3 秒</option>
-          <option value="5000">5 秒（默认）</option>
-          <option value="10000">10 秒</option>
-          <option value="20000">20 秒</option>
-        </select>
-      </div>
+      <h2>防滥用</h2>
       <div class="row">
         <label for="rateLimitPerMinute">每分钟上限</label>
         <select id="rateLimitPerMinute">
@@ -188,20 +178,6 @@
           <option value="30">30</option>
         </select>
       </div>
-    </section>
-
-    <section>
-      <h2>黑名单域名</h2>
-      <div class="row">
-        <label for="blacklist">不启用的站点</label>
-        <textarea
-          id="blacklist"
-          rows="4"
-          placeholder="每行一个域名，例如 example.com"
-          style="width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--fg); font: inherit;"
-        ></textarea>
-      </div>
-      <p class="hint">精确匹配主机名（不含协议）。保存后立即生效。</p>
     </section>
 
     <div class="actions">

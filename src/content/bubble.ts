@@ -9,10 +9,6 @@ import cssText from './style.css?inline';
 export interface BubbleCallbacks {
   /** 用户点击小蜜蜂时触发，由 index.ts 决定是否发起翻译 */
   onIconClick: () => void;
-  /** 用户点击气泡上的「复制」 */
-  onCopy: (text: string) => void;
-  /** 用户点击「收藏」（预留，M2 接入） */
-  onFavorite: (text: string, translation: string) => void;
 }
 
 export type BubbleState =
@@ -93,6 +89,14 @@ export class Bubble {
     this.host.remove();
   }
 
+  /**
+   * 返回 shadow root 引用。生产代码不需要（事件 retarget 后 host.contains 足够），
+   * 单测要断言 shadow DOM 内的元素就得拿到它，所以这里破例暴露一次。
+   */
+  getShadowRoot(): ShadowRoot {
+    return this.shadow;
+  }
+
   // ---------- 渲染 ----------
 
   private renderIcon(): void {
@@ -146,64 +150,22 @@ export class Bubble {
     latencyMs: number,
     rect: { x: number; y: number; width: number; height: number },
   ): void {
+    // 用户偏好：只显示翻译结果，让其自动消失，不要任何按钮。
     this.positionBubble(rect);
     this.clearBody();
 
     const bubble = document.createElement('div');
     bubble.className = 'beelingo-bubble';
 
-    const header = document.createElement('div');
-    header.className = 'beelingo-bubble-header';
-    const src = document.createElement('span');
-    src.className = 'source';
-    src.textContent = `译 ${latencyMs}ms`;
-    header.appendChild(src);
-    const close = document.createElement('button');
-    close.className = 'close';
-    close.setAttribute('aria-label', '关闭');
-    close.textContent = '✕';
-    close.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.hide();
-    });
-    header.appendChild(close);
-    bubble.appendChild(header);
-
-    if (original.length > 0) {
-      const orig = document.createElement('div');
-      orig.className = 'beelingo-bubble-original';
-      orig.textContent = original;
-      bubble.appendChild(orig);
-    }
-
     const tr = document.createElement('div');
     tr.className = 'beelingo-bubble-translation';
     tr.textContent = translation;
     bubble.appendChild(tr);
 
-    const actions = document.createElement('div');
-    actions.className = 'beelingo-bubble-actions';
-    const copyBtn = document.createElement('button');
-    copyBtn.textContent = '📋 复制';
-    copyBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.cb.onCopy(translation);
-      copyBtn.textContent = '✓ 已复制';
-      setTimeout(() => (copyBtn.textContent = '📋 复制'), 1200);
-    });
-    actions.appendChild(copyBtn);
-    const favBtn = document.createElement('button');
-    favBtn.textContent = '⭐ 收藏';
-    favBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.cb.onFavorite(original, translation);
-      favBtn.textContent = '✓ 已收藏';
-    });
-    actions.appendChild(favBtn);
-    bubble.appendChild(actions);
-
     this.shadow.appendChild(bubble);
     this.scheduleAutoClose();
+    void original;
+    void latencyMs;
   }
 
   private renderErrorBubble(
@@ -283,8 +245,10 @@ function friendlyError(code: string, message: string): string {
   switch (code) {
     case 'NO_API_KEY':
       return '请先在设置中配置 API Key';
+    case 'AUTH_ERROR':
+      return `API Key 无效或未授权 (${message})`;
     case 'QUOTA_EXCEEDED':
-      return `API Key 无效或配额已用尽 (${message})`;
+      return `账户余额/配额不足 (${message})`;
     case 'RATE_LIMIT':
       return '本分钟请求过多，请稍候再试';
     case 'NETWORK':

@@ -3,6 +3,7 @@
  * 仅由 background 调用：从 storage 读 API Key，绝不接收 Key 作为参数。
  */
 
+import { z } from 'zod';
 import { LANG_DISPLAY_NAME, type LangCodeValue } from './languages.js';
 
 /** 思维链控制：关闭 = 直接出译文；adaptive = 让模型自己决定。 */
@@ -38,6 +39,7 @@ export interface TranslateFailure {
   code:
     | 'NO_API_KEY'
     | 'NETWORK'
+    | 'AUTH_ERROR'
     | 'QUOTA_EXCEEDED'
     | 'RATE_LIMIT'
     | 'PROVIDER_ERROR'
@@ -50,6 +52,15 @@ export interface TranslateFailure {
 export type TranslateOutcome = TranslateSuccess | TranslateFailure;
 
 const MAX_TEXT_LEN = 500;
+/** 单次翻译请求的最长等待（ms）。超过即按 NETWORK 失败返回，避免气泡永久转圈。 */
+const FETCH_TIMEOUT_MS = 15_000;
+/**
+ * 思维链预留 token。推理型模型（如 DeepSeek）即使收到 MiniMax 专有的
+ * `thinking:disabled` 也照常思考，且 reasoning token 同样计入 max_tokens。
+ * 若 max_tokens 只按译文长度算，思考会吃光预算 → finish_reason=length、
+ * content 为空。这里固定预留一段，保证思考结束后仍有额度输出译文。
+ */
+const REASONING_HEADROOM_TOKENS = 1024;
 
 function buildSystemPrompt(src: LangCodeValue, tgt: LangCodeValue): string {
   const srcName = src === 'auto' ? 'the source language' : LANG_DISPLAY_NAME[src];
@@ -67,7 +78,9 @@ function buildSystemPrompt(src: LangCodeValue, tgt: LangCodeValue): string {
 
 /** 把 OpenAI 错误码映射到我们内部的 TranslateErrorCode */
 function classifyHttp(status: number): TranslateFailure['code'] {
-  if (status === 401 || status === 403) return 'QUOTA_EXCEEDED';
+  // 401/403 = Key 无效/未授权；402 = 余额不足；二者语义不同，不能混为一谈。
+  if (status === 401 || status === 403) return 'AUTH_ERROR';
+  if (status === 402) return 'QUOTA_EXCEEDED';
   if (status === 429) return 'RATE_LIMIT';
   if (status >= 500) return 'PROVIDER_ERROR';
   return 'UNKNOWN';
@@ -95,11 +108,19 @@ export async function translate(opts: TranslateOptions): Promise<TranslateOutcom
   const body = {
     model: opts.model,
     temperature: 0.2,
-    max_tokens: Math.max(64, Math.ceil(text.length * 2)),
-    // 关闭思维链时同时强制把 reasoning 留在 reasoning_content，
-    // 避免 M3 把 <think>...</think> 写进 content 污染译文。
+    // 译文预算（≈2× 输入）+ 思维链预留，避免 reasoning 占满额度导致空 content。
+    max_tokens: Math.ceil(text.length * 2) + REASONING_HEADROOM_TOKENS,
+    // 关闭思维链要同时下两种“方言”，因为各 provider 只认各自的字段：
+    //   - MiniMax 用 `thinking` + `reasoning_split`（把思考留在 reasoning_content）
+    //   - OpenRouter / OpenAI 系用标准 `reasoning:{enabled:false}`（真正停止推理）
+    // 互相忽略未知字段，因此两个都发，才能在任何一家上真正关掉思考链，
+    // 既避免 reasoning 占满 max_tokens 导致空 content，也省掉这笔 token 开销。
     ...(thinking === 'disabled'
-      ? { thinking: { type: 'disabled' }, reasoning_split: false }
+      ? {
+          thinking: { type: 'disabled' },
+          reasoning_split: false,
+          reasoning: { enabled: false },
+        }
       : { thinking: { type: 'adaptive' } }),
     messages: [
       { role: 'system', content: buildSystemPrompt(opts.sourceLang, opts.targetLang) },
@@ -107,7 +128,14 @@ export async function translate(opts: TranslateOptions): Promise<TranslateOutcom
     ],
   };
 
-  const t0 = Date.now();
+const t0 = Date.now();
+  // 内部超时：Firefox 115-126 若 host_permissions 未授权，fetch 会被 CORS 拒，
+  // 但在部分网络环境下也可能长时间挂起。叠加外部 signal 一起控制总时长。
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new Error('FETCH_TIMEOUT')), FETCH_TIMEOUT_MS);
+  const signal = opts.signal
+    ? composeAbortSignals(opts.signal, ctrl.signal)
+    : ctrl.signal;
   let res: Response;
   try {
     res = await fetch(url, {
@@ -117,18 +145,29 @@ export async function translate(opts: TranslateOptions): Promise<TranslateOutcom
         Authorization: `Bearer ${opts.apiKey}`,
       },
       body: JSON.stringify(body),
-      signal: opts.signal,
+      signal,
     });
   } catch (e) {
+    clearTimeout(timer);
     const msg = e instanceof Error ? e.message : String(e);
-    const isAbort = e instanceof DOMException && e.name === 'AbortError';
+    const isFetchTimeout = msg.startsWith('FETCH_TIMEOUT');
+    const isExternalAbort =
+      (e instanceof DOMException && e.name === 'AbortError') ||
+      (e instanceof Error && e.name === 'AbortError');
     return {
       ok: false,
-      code: isAbort ? 'UNKNOWN' : 'NETWORK',
-      message: isAbort ? '请求已取消' : `网络错误: ${msg}`,
-      retryable: !isAbort,
+      // 外部 AbortError 视为取消（UNKNOWN / 不重试）；
+      // 内部 FETCH_TIMEOUT 视为网络故障（NETWORK / 可重试）。
+      code: isExternalAbort ? 'UNKNOWN' : 'NETWORK',
+      message: isFetchTimeout
+        ? `请求超时（${FETCH_TIMEOUT_MS / 1000}s），可能是网络或 API 不可达`
+        : isExternalAbort
+        ? '请求已取消'
+        : `网络错误: ${msg}`,
+      retryable: !isExternalAbort,
     };
   }
+  clearTimeout(timer);
 
   if (!res.ok) {
     let detail = '';
@@ -158,12 +197,15 @@ export async function translate(opts: TranslateOptions): Promise<TranslateOutcom
     };
   }
 
-  const translated = extractContent(data);
+  const { content: translated, finishReason } = parseCompletion(data);
   if (!translated) {
     return {
       ok: false,
       code: 'PROVIDER_ERROR',
-      message: '响应缺少 choices[0].message.content',
+      message:
+        finishReason === 'length'
+          ? '输出被截断，max_tokens 不足（可能被思维链占满）'
+          : '响应缺少 choices[0].message.content',
       retryable: true,
     };
   }
@@ -176,11 +218,38 @@ export async function translate(opts: TranslateOptions): Promise<TranslateOutcom
   };
 }
 
-function extractContent(data: unknown): string | null {
-  if (!data || typeof data !== 'object') return null;
-  const d = data as { choices?: Array<{ message?: { content?: unknown } }> };
-  const first = d.choices?.[0];
-  const content = first?.message?.content;
-  if (typeof content === 'string') return content.trim();
-  return null;
+/** OpenAI 兼容的 chat.completion 响应，只取我们需要校验的字段。 */
+const ChatCompletionSchema = z.object({
+  choices: z
+    .array(
+      z.object({
+        finish_reason: z.string().optional(),
+        message: z.object({ content: z.string().nullable().optional() }).optional(),
+      }),
+    )
+    .optional(),
+});
+
+/** 提取译文与结束原因；非预期结构一律按「无译文」处理。 */
+function parseCompletion(data: unknown): { content: string | null; finishReason?: string } {
+  const parsed = ChatCompletionSchema.safeParse(data);
+  if (!parsed.success) return { content: null };
+  const first = parsed.data.choices?.[0];
+  const raw = first?.message?.content;
+  const content = typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : null;
+  return { content, finishReason: first?.finish_reason };
+}
+
+/**
+ * 把外部 signal 与内部超时 signal 合并成一个。任一被 abort 都会触发新 signal。
+ * AbortSignal.any() 浏览器支持参差，手写一个最简版本避免依赖。
+ */
+function composeAbortSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
+  if (a.aborted) return a;
+  if (b.aborted) return b;
+  const ctrl = new AbortController();
+  const onAbort = (): void => ctrl.abort();
+  a.addEventListener('abort', onAbort, { once: true });
+  b.addEventListener('abort', onAbort, { once: true });
+  return ctrl.signal;
 }

@@ -113,19 +113,28 @@ describe('translate', () => {
     expect(r.translated).toBe('你好');
   });
 
-  it('classifies 401 as QUOTA_EXCEEDED (not retryable)', async () => {
+  it('classifies 401 as AUTH_ERROR (not retryable)', async () => {
     installFetch(async () => jsonResponse(401, { error: { message: 'invalid key' } }));
+    const r = await translate(baseOpts);
+    if (r.ok) throw new Error('expected failure');
+    expect(r.code).toBe('AUTH_ERROR');
+    expect(r.retryable).toBe(false);
+    expect(r.message).toContain('invalid key');
+  });
+
+  it('classifies 403 as AUTH_ERROR', async () => {
+    installFetch(async () => jsonResponse(403, { error: { message: 'forbidden' } }));
+    const r = await translate(baseOpts);
+    if (r.ok) throw new Error('expected failure');
+    expect(r.code).toBe('AUTH_ERROR');
+  });
+
+  it('classifies 402 as QUOTA_EXCEEDED (not retryable)', async () => {
+    installFetch(async () => jsonResponse(402, { error: { message: 'insufficient credits' } }));
     const r = await translate(baseOpts);
     if (r.ok) throw new Error('expected failure');
     expect(r.code).toBe('QUOTA_EXCEEDED');
     expect(r.retryable).toBe(false);
-  });
-
-  it('classifies 403 as QUOTA_EXCEEDED', async () => {
-    installFetch(async () => jsonResponse(403, { error: { message: 'forbidden' } }));
-    const r = await translate(baseOpts);
-    if (r.ok) throw new Error('expected failure');
-    expect(r.code).toBe('QUOTA_EXCEEDED');
   });
 
   it('classifies 429 as RATE_LIMIT (retryable)', async () => {
@@ -150,6 +159,30 @@ describe('translate', () => {
     if (r.ok) throw new Error('expected failure');
     expect(r.code).toBe('UNKNOWN');
     expect(r.retryable).toBe(false);
+  });
+
+  it('budgets reasoning headroom into max_tokens', async () => {
+    const fetchMock = installFetch(async () =>
+      jsonResponse(200, { choices: [{ message: { content: '你好' } }] }),
+    );
+    await translate({ ...baseOpts, text: 'hi' });
+    const { init } = readFetchCall(fetchMock);
+    const body: unknown = JSON.parse(String(init?.body));
+    if (!body || typeof body !== 'object' || !('max_tokens' in body)) {
+      throw new Error('request body has no max_tokens');
+    }
+    // 短文本也必须远大于译文长度，否则推理型模型的 reasoning token 会占满额度、content 为空。
+    expect(Number(body.max_tokens)).toBeGreaterThanOrEqual(1024);
+  });
+
+  it('reports truncation when finish_reason is length', async () => {
+    installFetch(async () =>
+      jsonResponse(200, { choices: [{ finish_reason: 'length', message: { content: null } }] }),
+    );
+    const r = await translate(baseOpts);
+    if (r.ok) throw new Error('expected failure');
+    expect(r.code).toBe('PROVIDER_ERROR');
+    expect(r.message).toContain('截断');
   });
 
   it('treats non-JSON error body as plain HTTP error', async () => {
@@ -264,20 +297,24 @@ describe('translate', () => {
     expect(body.messages[1]?.content).toBe(baseOpts.text);
   });
 
-  it('defaults thinking=disabled and forces reasoning_split=false', async () => {
+  it('defaults thinking=disabled: thinking/reasoning_split/reasoning all off', async () => {
     const fetchMock = installFetch(async () =>
       jsonResponse(200, { choices: [{ message: { content: 'ok' } }] }),
     );
     await translate(baseOpts);
+    // 解析的是我们自己构造的请求体，形状已知；用命名 const 承载一次 unchecked cast。
     const body = JSON.parse(readFetchCall(fetchMock).init?.body as string) as {
       thinking?: { type?: string };
       reasoning_split?: boolean;
+      reasoning?: { enabled?: boolean };
     };
     expect(body.thinking).toEqual({ type: 'disabled' });
     expect(body.reasoning_split).toBe(false);
+    // 标准字段：OpenRouter 等 provider 据此真正停止推理
+    expect(body.reasoning).toEqual({ enabled: false });
   });
 
-  it('sends thinking=disabled + reasoning_split=false when explicitly requested', async () => {
+  it('sends thinking=disabled (+ reasoning) when explicitly requested', async () => {
     const fetchMock = installFetch(async () =>
       jsonResponse(200, { choices: [{ message: { content: 'ok' } }] }),
     );
@@ -285,12 +322,14 @@ describe('translate', () => {
     const body = JSON.parse(readFetchCall(fetchMock).init?.body as string) as {
       thinking?: { type?: string };
       reasoning_split?: boolean;
+      reasoning?: { enabled?: boolean };
     };
     expect(body.thinking).toEqual({ type: 'disabled' });
     expect(body.reasoning_split).toBe(false);
+    expect(body.reasoning).toEqual({ enabled: false });
   });
 
-  it('sends thinking=adaptive without reasoning_split when requested', async () => {
+  it('sends thinking=adaptive without reasoning_split or reasoning', async () => {
     const fetchMock = installFetch(async () =>
       jsonResponse(200, { choices: [{ message: { content: 'ok' } }] }),
     );
@@ -298,8 +337,10 @@ describe('translate', () => {
     const body = JSON.parse(readFetchCall(fetchMock).init?.body as string) as {
       thinking?: { type?: string };
       reasoning_split?: boolean;
+      reasoning?: { enabled?: boolean };
     };
     expect(body.thinking).toEqual({ type: 'adaptive' });
     expect(body.reasoning_split).toBeUndefined();
+    expect(body.reasoning).toBeUndefined();
   });
 });

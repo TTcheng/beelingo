@@ -16,12 +16,10 @@ const fields: Record<keyof Settings, HTMLElement> = {
   apiKey: $<HTMLInputElement>('apiKey'),
   apiBaseUrl: $<HTMLInputElement>('apiBaseUrl'),
   model: $<HTMLInputElement>('model'),
+  thinking: $<HTMLSelectElement>('thinking'),
   sourceLang: $<HTMLSelectElement>('sourceLang'),
   targetLang: $<HTMLSelectElement>('targetLang'),
-  trigger: $<HTMLSelectElement>('trigger'),
-  bubbleTtlMs: $<HTMLSelectElement>('bubbleTtlMs'),
   rateLimitPerMinute: $<HTMLSelectElement>('rateLimitPerMinute'),
-  blacklist: $<HTMLTextAreaElement>('blacklist'),
 };
 
 async function loadIntoForm(): Promise<void> {
@@ -29,31 +27,21 @@ async function loadIntoForm(): Promise<void> {
   (fields.apiKey as HTMLInputElement).value = s.apiKey;
   (fields.apiBaseUrl as HTMLInputElement).value = s.apiBaseUrl;
   (fields.model as HTMLInputElement).value = s.model;
+  (fields.thinking as HTMLSelectElement).value = s.thinking;
   (fields.sourceLang as HTMLSelectElement).value = s.sourceLang;
   (fields.targetLang as HTMLSelectElement).value = s.targetLang;
-  (fields.trigger as HTMLSelectElement).value = s.trigger;
-  (fields.bubbleTtlMs as HTMLSelectElement).value = String(s.bubbleTtlMs);
   (fields.rateLimitPerMinute as HTMLSelectElement).value = String(s.rateLimitPerMinute);
-  (fields.blacklist as HTMLTextAreaElement).value = s.blacklist.join('\n');
 }
 
 function readFromForm(): Settings {
-  const blacklistRaw = (fields.blacklist as HTMLTextAreaElement).value;
-  const blacklist = blacklistRaw
-    .split(/[\n,]/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-
   return SettingsSchema.parse({
     apiKey: (fields.apiKey as HTMLInputElement).value,
     apiBaseUrl: (fields.apiBaseUrl as HTMLInputElement).value,
     model: (fields.model as HTMLInputElement).value,
+    thinking: (fields.thinking as HTMLSelectElement).value,
     sourceLang: (fields.sourceLang as HTMLSelectElement).value,
     targetLang: (fields.targetLang as HTMLSelectElement).value,
-    trigger: (fields.trigger as HTMLSelectElement).value,
-    bubbleTtlMs: Number((fields.bubbleTtlMs as HTMLSelectElement).value),
     rateLimitPerMinute: Number((fields.rateLimitPerMinute as HTMLSelectElement).value),
-    blacklist,
   });
 }
 

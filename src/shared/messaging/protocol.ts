@@ -10,12 +10,10 @@ export const MessageType = {
   // content → background
   TranslateRequest: 'TRANSLATE_REQUEST',
   ValidateApiKey: 'VALIDATE_API_KEY',
-  GetSettings: 'GET_SETTINGS',
 
   // background → content
   TranslateResult: 'TRANSLATE_RESULT',
   TranslateError: 'TRANSLATE_ERROR',
-  SettingsUpdated: 'SETTINGS_UPDATED',
 
   // background → content（触发翻译入口）
   HotkeyTriggered: 'BEELINGO_HOTKEY_TRIGGERED',
@@ -44,6 +42,9 @@ export interface TranslateResultPayload {
 export type TranslateErrorCode =
   | 'NO_API_KEY'
   | 'NETWORK'
+  // 401/403：Key 无效或未授权
+  | 'AUTH_ERROR'
+  // 402：余额/配额不足
   | 'QUOTA_EXCEEDED'
   | 'RATE_LIMIT'
   | 'INVALID_TEXT'

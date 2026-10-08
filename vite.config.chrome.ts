@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 import { copyFileSync, cpSync } from 'node:fs';
+import { buildContent } from './scripts/build-content.mjs';
 
 const root = resolve(__dirname, 'src');
 const outDir = resolve(__dirname, 'dist/chrome');
@@ -28,8 +29,11 @@ export default defineConfig({
   plugins: [
     {
       name: 'beelingo-copy-static',
-      closeBundle() {
+      async closeBundle() {
         copyStatic('chrome');
+        // content 入口不走 Vite：MV3 content_scripts 是经典脚本，ESM 会报
+        // "Cannot use import statement outside a module"。单独打成 IIFE。
+        await buildContent('chrome');
       },
     },
   ],
@@ -40,9 +44,9 @@ export default defineConfig({
     sourcemap: true,
     target: 'es2022',
     rollupOptions: {
+      // content 由 scripts/build-content.mjs 打成 IIFE，见 closeBundle。
       input: {
         background: resolve(root, 'background/index.ts'),
-        content: resolve(root, 'content/index.ts'),
         options: resolve(root, 'options.html'),
         popup: resolve(root, 'popup.html'),
       },

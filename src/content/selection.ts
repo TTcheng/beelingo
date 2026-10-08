@@ -34,6 +34,10 @@ export function watchSelection(cb: (info: SelectionInfo | null) => void): () => 
     }
 
     const range = sel.getRangeAt(0);
+    // Range.getBoundingClientRect() 返回的是 viewport-relative 坐标（不是 page coords）。
+    // 直接传给 showIcon / setLoading 就够了；它们用 host 的 position: fixed 显示，
+    // 也走 viewport 坐标。早期实现里误加了 scrollX/scrollY，会让用户滚动页面后
+    // 图标位置完全错乱。
     const rect = range.getBoundingClientRect();
     // 选区可能完全离屏（开发工具、隐藏 iframe 等）
     if (rect.width === 0 && rect.height === 0) {
@@ -43,8 +47,8 @@ export function watchSelection(cb: (info: SelectionInfo | null) => void): () => 
     cb({
       text,
       rect: {
-        x: rect.left + window.scrollX,
-        y: rect.top + window.scrollY,
+        x: rect.left,
+        y: rect.top,
         width: rect.width,
         height: rect.height,
       },
